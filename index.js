@@ -11,9 +11,10 @@ function express() {
     var index = 0;
     var queue = this.queue;
     function next(err) {
-      var nFn = queue[index++];
+      //var nFn = queue[index++];
+      var nLayer = queue[index++];
       //结束
-      if (!nFn) {
+      if (!nLayer) {
         if (out) {
           return out(err);
         }
@@ -27,18 +28,25 @@ function express() {
         return;  //注意在这里return
       }
       try {
-        var arity = nFn.length;
-        if (err) {
-          //下个middleware有四个参数
+        var arity = nLayer.handle.length;
+        if (err) {  //pass err
           if (arity == 4) {
-            nFn(err, req, res, next);
+            if (nLayer.match(req.url)) {
+              nLayer.handle(err, req, res, next);
+            } else {
+              next(err);
+            }
           } else {
             next(err);
           }
-        } else if (arity < 4) {
-            nFn(req, res, next);
-        } else {
+        } else if (arity < 4) { //call middleware
+          if (nLayer.match(req.url)) {
+            nLayer.handle(req, res, next);
+          } else {
             next();
+          }
+        } else {
+          next();
         }
       } catch (e) {
         //uncaught error
@@ -47,18 +55,25 @@ function express() {
     }
     next();
   }
-  app.use = function(fn) {
-    //if ('function' == typeof fn) {
-    //  this.queue.push(fn);
-    //}
-    //sub app
+  app.use = function(path, fn) {
+    var route = "/", layer;
+    var Layer = require("./lib/layer");
+    //if has path arg
+    if ('function' == typeof fn) {
+      route = path;
+    } else {
+      fn = path;
+    }
+    //if fn is sub app
     if ('function' == typeof fn.handle) {
       var server = fn;
       fn = function(req, res, next) {
         server.handle(req, res, next);
       }
     }
-    this.queue.push(fn);
+    //add layer to queue
+    layer = new Layer(route, fn);
+    this.queue.push(layer);
     return this;
   }
   app.listen = function() {
