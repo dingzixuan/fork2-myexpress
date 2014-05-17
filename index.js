@@ -31,7 +31,8 @@ function express() {
         var arity = nLayer.handle.length;
         if (err) {  //pass err
           if (arity == 4) {
-            if (nLayer.match(req.url)) {
+            if (reqInfo = nLayer.match(req.url)) {
+              req.params = reqInfo.params;
               nLayer.handle(err, req, res, next);
             } else {
               next(err);
@@ -40,7 +41,8 @@ function express() {
             next(err);
           }
         } else if (arity < 4) { //call middleware
-          if (nLayer.match(req.url)) {
+          if (reqInfo = nLayer.match(req.url)) {
+            req.params = reqInfo.params;
             nLayer.handle(req, res, next);
           } else {
             next();
