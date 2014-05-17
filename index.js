@@ -58,13 +58,12 @@ function express() {
     next();
   }
   app.use = function(path, fn) {
-    var route = "/", layer;
+    var layer;
     var Layer = require("./lib/layer");
-    //if has path arg
-    if ('function' == typeof fn) {
-      route = path;
-    } else {
+    //if has no path arg
+    if ('string' != typeof path) {
       fn = path;
+      path = "/";
     }
     //if fn is sub app
     if ('function' == typeof fn.handle) {
@@ -74,7 +73,7 @@ function express() {
       }
     }
     //add layer to queue
-    layer = new Layer(route, fn);
+    layer = new Layer(path, fn);
     this.queue.push(layer);
     return this;
   }
