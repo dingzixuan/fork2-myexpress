@@ -1,18 +1,21 @@
 var http = require("http");
+var methods = require("methods");
 var Layer = require("./lib/layer");
+var route = require("./lib/route");
 
 function express() {
 
   //让app和app.handle参数一致，middleware就既可以是app也可以是function(req,res,next)
   function app(req, res, next) {
     app.handle(req, res, next);
+    return app.appErr;  //一个app调用结束返回err
   }
   app.isSubApp = false;
   app.queue = [];
+  app.appErr;
   app.handle = function(req, res, out) {
     var index = 0;
-    var queue = this.queue;
-    function next(err) {
+    var queue = this.queue;    function next(err) {
       var nLayer = queue[index++];
       //从本app中结束
       if (!nLayer) {
@@ -22,10 +25,12 @@ function express() {
         // }
         //为了实现trim url，这里如果一个subapp调用完毕则直接return，在外层修改回url后再调用next实现延续调用
         if (app.isSubApp) {
-          //err handle
+          //pass err to parent
+          app.appErr = err;
+          return;
         }
         //unhandled error should return 500
-        else if (err) {
+        if (err) {
           res.statusCode = 500;
           res.write("500");
           res.end();
@@ -51,9 +56,13 @@ function express() {
         if ('function' == typeof nLayer.handle.handle) {
           var oriUrl = req.url;
           req.url = req.url.substring(reqInfo.path.length);
-          nLayer.handle(req, res, next);
+          if (err) {
+            subErr = nLayer.handle(err, req, res, next); //if exists err, pass it
+          } else {
+            subErr = nLayer.handle(req, res, next);
+          }
           req.url = oriUrl;
-          next(err);
+          next(subErr);  
         }
 
         else if (err) {  //pass err
@@ -100,6 +109,11 @@ function express() {
   //  server.listen(port, function(){done();});
   //  return server;
   //}
+  methods.forEach(function(method){
+    app[method] = function(path, handler) {
+      app.use(path, handler, true);
+    }
+  });
   return app;
 }
 
