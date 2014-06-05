@@ -5,18 +5,19 @@ var route = require("./lib/route");
 
 function express() {
 
-  //让app和app.handle参数一致，middleware就既可以是app也可以是function(req,res,next)
+  //让app和app.handler参数一致，middleware就既可以是app也可以是function(req,res,next)
   function app(req, res, next) {
-    app.handle(req, res, next);
+    app.handler(req, res, next);
     return app.appErr;  //一个app调用结束返回err
   }
   app.isSubApp = false;
-  app.queue = [];
+  app.stack = [];
   app.appErr;
-  app.handle = function(req, res, out) {
+  app.handler = function(req, res, out) {
     var index = 0;
-    var queue = this.queue;    function next(err) {
-      var nLayer = queue[index++];
+    var stack = this.stack;    
+    function next(err) {
+      var nLayer = stack[index++];
       //从本app中结束
       if (!nLayer) {
         //trim url 之前是在这里app调用结束后，调用out实现到另一个app的延续调用
@@ -50,16 +51,16 @@ function express() {
           return next(err); 
         }  
         req.params = reqInfo.params;
-        var arity = nLayer.handle.length;
+        var arity = nLayer.handler.length;
 
-        //if middleware is a subapp, trim the req.url prefix and call handle
-        if ('function' == typeof nLayer.handle.handle) {
+        //if middleware is a subapp, trim the req.url prefix and call handler
+        if ('function' == typeof nLayer.handler.handler) {
           var oriUrl = req.url;
           req.url = req.url.substring(reqInfo.path.length);
           if (err) {
-            subErr = nLayer.handle(err, req, res, next); //if exists err, pass it
+            subErr = nLayer.handler(err, req, res, next); //if exists err, pass it
           } else {
-            subErr = nLayer.handle(req, res, next);
+            subErr = nLayer.handler(req, res, next);
           }
           req.url = oriUrl;
           next(subErr);  
@@ -67,12 +68,12 @@ function express() {
 
         else if (err) {  //pass err
           if (arity == 4) {
-            nLayer.handle(err, req, res, next);
+            nLayer.handler(err, req, res, next);
           } else {
             next(err);
           }
         } else if (arity < 4) { //call middleware
-          nLayer.handle(req, res, next);
+          nLayer.handler(req, res, next);
         } else {
           next();
         }
@@ -92,13 +93,18 @@ function express() {
     }
     prefix = prefix || false;
     //if middleware is a subapp
-    if ('function' == typeof mw.handle) {
+    if ('function' == typeof mw.handler) {
       mw.isSubApp = true;
     }
-    //add layer to queue
+    //add layer to stack
     layer = new Layer(path, mw, prefix);
-    this.queue.push(layer);
+    this.stack.push(layer);
     return this;
+  }
+  app.route = function(path) {
+    var r =  route();
+    app.use(path, r, true);
+    return r;
   }
   app.listen = function() {
     var server = http.createServer(this);
@@ -109,9 +115,9 @@ function express() {
   //  server.listen(port, function(){done();});
   //  return server;
   //}
-  methods.forEach(function(method){
+  methods.concat(['all']).forEach(function(method){
     app[method] = function(path, handler) {
-      app.use(path, handler, true);
+      return app.use(path, handler, true);
     }
   });
   return app;
